@@ -27,28 +27,38 @@ function App() {
     let newBalance = 0;
 
     matches.forEach(match => {
-      if (match.wonBy && match.betBy && match.betAt) {
-        if (match.wonBy === 'No Result') {
-          return;
+      if (match.wonBy && match.wonBy !== 'No Result') {
+        // Case 1: Someone was supposed to bet but didn't (missed the bet)
+        if (match.betBy && !match.betAt) {
+          // The person who missed the bet loses - opponent gets 1000 points
+          const winner = match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal';
+          if (winner === 'Akash Agarwal') {
+            newBalance += 1000;
+          } else {
+            newBalance -= 1000;
+          }
         }
-        
-        // Determine who won this bet
-        let betWinner;
-        if (match.betAt === match.wonBy) {
-          // Correct prediction - bettor wins
-          betWinner = match.betBy;
-        } else {
-          // Wrong prediction - other person wins
-          betWinner = match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal';
-        }
-        
-        // Update balance: positive for Akash, negative for Aritra
-        if (betWinner === 'Akash Agarwal') {
-          newBalance += 1000;
-        } else {
-          newBalance -= 1000;
+        // Case 2: Someone placed a bet
+        else if (match.betBy && match.betAt) {
+          // Determine who won this bet
+          let betWinner;
+          if (match.betAt === match.wonBy) {
+            // Correct prediction - bettor wins
+            betWinner = match.betBy;
+          } else {
+            // Wrong prediction - other person wins
+            betWinner = match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal';
+          }
+          
+          // Update balance: positive for Akash, negative for Aritra
+          if (betWinner === 'Akash Agarwal') {
+            newBalance += 1000;
+          } else {
+            newBalance -= 1000;
+          }
         }
       }
+      // If 'No Result', no points for anyone regardless of bet
     });
 
     setBalance(newBalance);
