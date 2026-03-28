@@ -26,26 +26,22 @@ function App() {
 
   const calculateScores = () => {
     const newScores = {
-      'Akash Agarwal': 1000,
-      'Aritra Mustafi': 1000
+      'Akash Agarwal': 0,
+      'Aritra Mustafi': 0
     };
 
     matches.forEach(match => {
       if (match.wonBy && match.betBy && match.betAt) {
-        if (match.wonBy === 'No Result') {
-          // No change for no result
-          return;
-        }
-        
-        // Determine who loses points
+        // Check if the prediction was correct
         if (match.betAt === match.wonBy) {
-          // Correct prediction - the OTHER person loses 1000 points
-          const loser = match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal';
-          newScores[loser] -= 1000;
-        } else {
-          // Wrong prediction - the bettor loses 1000 points
-          newScores[match.betBy] -= 1000;
+          // Correct prediction - betBy person gets 1000 points
+          newScores[match.betBy] += 1000;
+        } else if (match.wonBy !== 'No Result') {
+          // Wrong prediction - other person gets 1000 points
+          const otherPerson = match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal';
+          newScores[otherPerson] += 1000;
         }
+        // If 'No Result', no points for anyone
       }
     });
 
@@ -68,12 +64,16 @@ function App() {
   };
 
   const handleBetUpdate = async (matchId, betBy, betAt) => {
-    // If clearing the bet (no betBy), we need to handle it specially
+    // Store previous state for rollback
+    const previousMatches = matches;
+    
+    // Optimistically update UI immediately
+    setMatches(matches.map(match => 
+      match.id === matchId ? { ...match, betBy: betBy || null, betAt: betAt || null } : match
+    ));
+
+    // If clearing the bet, no API call needed
     if (!betBy && !betAt) {
-      // Just update local state, don't call API
-      setMatches(matches.map(match => 
-        match.id === matchId ? { ...match, betBy: null, betAt: null } : match
-      ));
       return;
     }
 
@@ -88,21 +88,28 @@ function App() {
           body: JSON.stringify({ betBy, betAt }),
         });
         
-        if (response.ok) {
-          // Update local state with betBy as well
-          setMatches(matches.map(match => 
-            match.id === matchId ? { ...match, betBy, betAt } : match
-          ));
-        } else {
+        if (!response.ok) {
+          // Revert on failure
           console.error('Failed to update bet:', await response.text());
+          setMatches(previousMatches);
         }
       } catch (error) {
+        // Revert on error
         console.error('Error updating bet:', error);
+        setMatches(previousMatches);
       }
     }
   };
 
   const handleWinnerUpdate = async (matchId, wonBy) => {
+    // Store previous state for rollback
+    const previousMatches = matches;
+    
+    // Optimistically update UI immediately
+    setMatches(matches.map(match => 
+      match.id === matchId ? { ...match, wonBy } : match
+    ));
+
     try {
       const response = await fetch(`${API_BASE_URL}/ipl-schedule/${matchId}`, {
         method: 'PATCH',
@@ -112,15 +119,15 @@ function App() {
         body: JSON.stringify({ wonBy }),
       });
       
-      if (response.ok) {
-        setMatches(matches.map(match => 
-          match.id === matchId ? { ...match, wonBy } : match
-        ));
-      } else {
+      if (!response.ok) {
+        // Revert on failure
         console.error('Failed to update winner:', await response.text());
+        setMatches(previousMatches);
       }
     } catch (error) {
+      // Revert on error
       console.error('Error updating winner:', error);
+      setMatches(previousMatches);
     }
   };
 
@@ -264,11 +271,11 @@ function App() {
               {match.wonBy && match.betBy && match.betAt && (
                 <div className={`result ${match.betAt === match.wonBy ? 'correct' : 'incorrect'}`}>
                   {match.betAt === match.wonBy ? (
-                    <span>{match.betBy} predicted correctly! ({match.betAt}) +1000</span>
+                    <span>{match.betBy} predicted correctly! ({match.betAt}) - {match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal'} -1000</span>
                   ) : match.wonBy === 'No Result' ? (
                     <span>Match had no result. {match.betBy} bet on {match.betAt}</span>
                   ) : (
-                    <span>{match.betBy} predicted wrong ({match.betAt}). {match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal'} +1000</span>
+                    <span>{match.betBy} predicted wrong ({match.betAt}). {match.betBy} -1000</span>
                   )}
                 </div>
               )}
