@@ -9,6 +9,9 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('upcoming');
   const [balance, setBalance] = useState(0); // Positive = Akash leads, Negative = Aritra leads
+  const [filterName, setFilterName] = useState('all'); // 'all', 'Akash Agarwal', 'Aritra Mustafi'
+  const [filterTeam, setFilterTeam] = useState('all'); // 'all' or team name
+  const [teams, setTeams] = useState([]);
 
   const fetchMatches = async () => {
     try {
@@ -16,6 +19,15 @@ function App() {
       const data = await response.json();
       console.log('First match from API:', data[0]);
       setMatches(data);
+      
+      // Extract unique teams
+      const uniqueTeams = new Set();
+      data.forEach(match => {
+        uniqueTeams.add(match.homeTeam);
+        uniqueTeams.add(match.awayTeam);
+      });
+      setTeams(Array.from(uniqueTeams).sort());
+      
       setLoading(false);
     } catch (error) {
       console.error('Error fetching matches:', error);
@@ -200,9 +212,26 @@ function App() {
 
   const todayString = getTodayString();
   
+  // Apply filters
+  const applyFilters = (matchList) => {
+    return matchList.filter(match => {
+      // Filter by name
+      if (filterName !== 'all' && match.betBy !== filterName) {
+        return false;
+      }
+      
+      // Filter by team
+      if (filterTeam !== 'all' && match.homeTeam !== filterTeam && match.awayTeam !== filterTeam) {
+        return false;
+      }
+      
+      return true;
+    });
+  };
+  
   // Categorize matches
-  const upcomingMatches = matches.filter(m => !m.wonBy).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
-  const completedMatches = matches.filter(m => m.wonBy).sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+  const upcomingMatches = applyFilters(matches.filter(m => !m.wonBy)).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+  const completedMatches = applyFilters(matches.filter(m => m.wonBy)).sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
   
   // Find the next match to highlight (first upcoming match)
   const nextMatchId = upcomingMatches.length > 0 ? upcomingMatches[0].id : null;
@@ -243,29 +272,12 @@ function App() {
         </div>
 
         <div className="predictions">
-          <div className="prediction-row">
-            <label>Who&apos;s Betting:</label>
-            <select
-              value={match.betBy || ''}
-              onChange={(e) => {
-                const newBetBy = e.target.value;
-                if (!newBetBy) {
-                  handleBetUpdate(match.id, '', '');
-                } else {
-                  const newBetAt = match.betBy === newBetBy ? match.betAt : '';
-                  setMatches(matches.map(m => 
-                    m.id === match.id ? { ...m, betBy: newBetBy, betAt: newBetAt } : m
-                  ));
-                }
-              }}
-              disabled={disabled || isCompleted}
-              className="bet-select"
-            >
-              <option value="">No one</option>
-              <option value="Akash Agarwal">Akash Agarwal</option>
-              <option value="Aritra Mustafi">Aritra Mustafi</option>
-            </select>
-          </div>
+          {match.betBy && (
+            <div className="prediction-row">
+              <label>Assigned to:</label>
+              <div className="bet-display assigned">{match.betBy}</div>
+            </div>
+          )}
 
           {match.betBy && !disabled && !isCompleted && (
             <div className="prediction-row">
@@ -346,6 +358,48 @@ function App() {
           )}
         </div>
       </header>
+
+      {/* Filters */}
+      <div className="filters">
+        <div className="filter-group">
+          <label>Filter by Person:</label>
+          <select 
+            value={filterName} 
+            onChange={(e) => setFilterName(e.target.value)}
+            className="filter-select"
+          >
+            <option value="all">All</option>
+            <option value="Akash Agarwal">Akash Agarwal</option>
+            <option value="Aritra Mustafi">Aritra Mustafi</option>
+          </select>
+        </div>
+        
+        <div className="filter-group">
+          <label>Filter by Team:</label>
+          <select 
+            value={filterTeam} 
+            onChange={(e) => setFilterTeam(e.target.value)}
+            className="filter-select"
+          >
+            <option value="all">All Teams</option>
+            {teams.map(team => (
+              <option key={team} value={team}>{team}</option>
+            ))}
+          </select>
+        </div>
+        
+        {(filterName !== 'all' || filterTeam !== 'all') && (
+          <button 
+            className="clear-filters"
+            onClick={() => {
+              setFilterName('all');
+              setFilterTeam('all');
+            }}
+          >
+            Clear Filters
+          </button>
+        )}
+      </div>
 
       {/* Tabs */}
       <div className="tabs">

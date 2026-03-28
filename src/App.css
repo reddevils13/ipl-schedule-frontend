@@ -27,6 +27,77 @@ body {
   border: 1px solid #e1e4e8;
 }
 
+.filters {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e1e4e8;
+  display: flex;
+  gap: 20px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.filter-group label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #586069;
+}
+
+.filter-select {
+  padding: 8px 12px;
+  border: 1px solid #d1d5da;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  background: white;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+  color: #24292e;
+}
+
+.filter-select:hover {
+  border-color: #959da5;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #0366d6;
+  box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.1);
+}
+
+.clear-filters {
+  padding: 8px 16px;
+  background: #fafbfc;
+  border: 1px solid #d1d5da;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #586069;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.clear-filters:hover {
+  background: #f3f4f6;
+  border-color: #959da5;
+}
+
+.clear-filters:active {
+  background: #e1e4e8;
+}
+
 .header h1 {
   text-align: center;
   color: #24292e;
@@ -343,6 +414,12 @@ body {
   color: #24292e;
 }
 
+.bet-display.assigned {
+  background: #f1f8ff;
+  border-color: #c8e1ff;
+  color: #0366d6;
+}
+
 .bet-select:hover:not(:disabled),
 .winner-select:hover {
   border-color: #959da5;
@@ -416,6 +493,19 @@ body {
 
   .header h1 {
     font-size: 1.5rem;
+  }
+
+  .filters {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .filter-group {
+    min-width: 100%;
+  }
+
+  .clear-filters {
+    width: 100%;
   }
 
   .score-balance,
