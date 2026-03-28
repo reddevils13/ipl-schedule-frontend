@@ -279,7 +279,7 @@ function App() {
             </div>
           )}
 
-          {match.betBy && !disabled && !isCompleted && (
+          {match.betBy && !disabled && !isCompleted && !match.betAt && (
             <div className="prediction-row">
               <label>Betting On:</label>
               <select
@@ -294,7 +294,24 @@ function App() {
             </div>
           )}
 
-          {match.betBy && (disabled || isCompleted) && match.betAt && (
+          {match.betBy && match.betAt && !isCompleted && (
+            <div className="prediction-row">
+              <label>Betting On:</label>
+              <div className="bet-display locked-bet">
+                {match.betAt}
+                {!disabled && (
+                  <button 
+                    className="change-bet-btn"
+                    onClick={() => handleBetUpdate(match.id, match.betBy, '')}
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {match.betBy && match.betAt && isCompleted && (
             <div className="prediction-row">
               <label>Betting On:</label>
               <div className="bet-display">{match.betAt}</div>

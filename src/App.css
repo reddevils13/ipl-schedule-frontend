@@ -420,6 +420,38 @@ body {
   color: #0366d6;
 }
 
+.bet-display.locked-bet {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fffbdd;
+  border-color: #ffdf5d;
+}
+
+.change-bet-btn {
+  padding: 4px 12px;
+  background: white;
+  border: 1px solid #d1d5da;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #586069;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.change-bet-btn:hover {
+  background: #fafbfc;
+  border-color: #959da5;
+  color: #24292e;
+}
+
+.change-bet-btn:active {
+  background: #e1e4e8;
+}
+
 .bet-select:hover:not(:disabled),
 .winner-select:hover {
   border-color: #959da5;
