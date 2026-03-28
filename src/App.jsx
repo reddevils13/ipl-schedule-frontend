@@ -7,15 +7,14 @@ const API_BASE_URL = 'https://football-wiki-production.up.railway.app';
 function App() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [scores, setScores] = useState({
-    'Akash Agarwal': 1000,
-    'Aritra Mustafi': 1000
-  });
+  const [activeTab, setActiveTab] = useState('upcoming');
+  const [balance, setBalance] = useState(0); // Positive = Akash leads, Negative = Aritra leads
 
   const fetchMatches = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/ipl-schedule`);
       const data = await response.json();
+      console.log('First match from API:', data[0]);
       setMatches(data);
       setLoading(false);
     } catch (error) {
@@ -24,28 +23,35 @@ function App() {
     }
   };
 
-  const calculateScores = () => {
-    const newScores = {
-      'Akash Agarwal': 0,
-      'Aritra Mustafi': 0
-    };
+  const calculateBalance = () => {
+    let newBalance = 0;
 
     matches.forEach(match => {
       if (match.wonBy && match.betBy && match.betAt) {
-        // Check if the prediction was correct
-        if (match.betAt === match.wonBy) {
-          // Correct prediction - betBy person gets 1000 points
-          newScores[match.betBy] += 1000;
-        } else if (match.wonBy !== 'No Result') {
-          // Wrong prediction - other person gets 1000 points
-          const otherPerson = match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal';
-          newScores[otherPerson] += 1000;
+        if (match.wonBy === 'No Result') {
+          return;
         }
-        // If 'No Result', no points for anyone
+        
+        // Determine who won this bet
+        let betWinner;
+        if (match.betAt === match.wonBy) {
+          // Correct prediction - bettor wins
+          betWinner = match.betBy;
+        } else {
+          // Wrong prediction - other person wins
+          betWinner = match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal';
+        }
+        
+        // Update balance: positive for Akash, negative for Aritra
+        if (betWinner === 'Akash Agarwal') {
+          newBalance += 1000;
+        } else {
+          newBalance -= 1000;
+        }
       }
     });
 
-    setScores(newScores);
+    setBalance(newBalance);
   };
 
   useEffect(() => {
@@ -53,31 +59,45 @@ function App() {
   }, []);
 
   useEffect(() => {
-    calculateScores();
+    calculateBalance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matches]);
 
   const isUpdateDisabled = (startTime) => {
     const matchTime = new Date(startTime);
     const thirtyMinsBefore = new Date(matchTime.getTime() - 30 * 60 * 1000);
-    return new Date() >= thirtyMinsBefore;
+    const now = new Date();
+    
+    const isDisabled = now.getTime() >= thirtyMinsBefore.getTime();
+    
+    // Debug logging
+    console.log('Checking lock status:');
+    console.log('  Match time:', matchTime.toISOString());
+    console.log('  30 mins before:', thirtyMinsBefore.toISOString());
+    console.log('  Current time:', now.toISOString());
+    console.log('  Is locked?', isDisabled);
+    
+    return isDisabled;
   };
 
   const handleBetUpdate = async (matchId, betBy, betAt) => {
-    // Store previous state for rollback
+    // Find the match and check if updates are allowed
+    const match = matches.find(m => m.id === matchId);
+    if (match && (isUpdateDisabled(match.startTime) || match.wonBy)) {
+      console.warn('Cannot update bet - match is locked or completed');
+      return;
+    }
+
     const previousMatches = matches;
     
-    // Optimistically update UI immediately
     setMatches(matches.map(match => 
       match.id === matchId ? { ...match, betBy: betBy || null, betAt: betAt || null } : match
     ));
 
-    // If clearing the bet, no API call needed
     if (!betBy && !betAt) {
       return;
     }
 
-    // Only make API call if we have both betBy and betAt
     if (betBy && betAt) {
       try {
         const response = await fetch(`${API_BASE_URL}/ipl-schedule/${matchId}`, {
@@ -89,12 +109,10 @@ function App() {
         });
         
         if (!response.ok) {
-          // Revert on failure
           console.error('Failed to update bet:', await response.text());
           setMatches(previousMatches);
         }
       } catch (error) {
-        // Revert on error
         console.error('Error updating bet:', error);
         setMatches(previousMatches);
       }
@@ -102,10 +120,8 @@ function App() {
   };
 
   const handleWinnerUpdate = async (matchId, wonBy) => {
-    // Store previous state for rollback
     const previousMatches = matches;
     
-    // Optimistically update UI immediately
     setMatches(matches.map(match => 
       match.id === matchId ? { ...match, wonBy } : match
     ));
@@ -120,50 +136,178 @@ function App() {
       });
       
       if (!response.ok) {
-        // Revert on failure
         console.error('Failed to update winner:', await response.text());
         setMatches(previousMatches);
       }
     } catch (error) {
-      // Revert on error
       console.error('Error updating winner:', error);
       setMatches(previousMatches);
     }
   };
 
-  const formatDate = (dateString) => {
-    // The DB stores IST time but with a Z suffix (incorrectly marked as UTC)
-    // Extract the time components directly from the ISO string
-    const match = dateString.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-    if (!match) return dateString;
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
     
-    const [, year, month, day, hours, minutes] = match;
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const monthName = monthNames[parseInt(month, 10) - 1];
+    // Convert to IST (Asia/Kolkata timezone)
+    const istTime = date.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
     
-    let hour = parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'pm' : 'am';
-    hour = hour % 12;
-    hour = hour ? hour : 12;
-    
-    return `${parseInt(day, 10)} ${monthName}, ${hour}:${minutes} ${ampm}`;
+    return istTime.toLowerCase();
   };
 
-  const scoreDiff = scores['Akash Agarwal'] - scores['Aritra Mustafi'];
-  const leader = scoreDiff > 0 ? 'Akash Agarwal' : scoreDiff < 0 ? 'Aritra Mustafi' : 'Tie';
+  const formatDateHeader = (dateString) => {
+    const match = dateString.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return dateString;
+    
+    const [, year, month, day] = match;
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const dayName = dayNames[date.getDay()];
+    const monthName = monthNames[parseInt(month, 10) - 1];
+    
+    return `${dayName}, ${parseInt(day, 10)} ${monthName} ${year}`;
+  };
 
-  // Sort matches: incomplete matches first, completed matches at the bottom
-  const sortedMatches = [...matches].sort((a, b) => {
-    const aCompleted = a.wonBy ? 1 : 0;
-    const bCompleted = b.wonBy ? 1 : 0;
-    
-    if (aCompleted !== bCompleted) {
-      return aCompleted - bCompleted; // Incomplete (0) comes before completed (1)
-    }
-    
-    // Within same completion status, sort by start time
-    return new Date(a.startTime) - new Date(b.startTime);
-  });
+  const getMatchDateString = (dateString) => {
+    const match = dateString.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return '';
+    return match[0];
+  };
+
+  const getTodayString = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const todayString = getTodayString();
+  
+  // Categorize matches
+  const upcomingMatches = matches.filter(m => !m.wonBy).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+  const completedMatches = matches.filter(m => m.wonBy).sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+  
+  // Find the next match to highlight (first upcoming match)
+  const nextMatchId = upcomingMatches.length > 0 ? upcomingMatches[0].id : null;
+  
+  // Group upcoming matches by date
+  const groupMatchesByDate = (matchList) => {
+    const groups = {};
+    matchList.forEach(match => {
+      const dateStr = getMatchDateString(match.startTime);
+      if (!groups[dateStr]) {
+        groups[dateStr] = [];
+      }
+      groups[dateStr].push(match);
+    });
+    return groups;
+  };
+
+  const upcomingByDate = groupMatchesByDate(upcomingMatches);
+  const completedByDate = groupMatchesByDate(completedMatches);
+
+  const renderMatchCard = (match, isHighlighted = false) => {
+    const disabled = isUpdateDisabled(match.startTime);
+    const isCompleted = !!match.wonBy;
+
+    return (
+      <div key={match.id} className={`match-card ${isHighlighted ? 'highlighted' : ''} ${isCompleted ? 'completed' : ''}`}>
+        <div className="match-header">
+          <div className="match-time">{formatTime(match.startTime)}</div>
+          {isHighlighted && <span className="badge next">Next Match</span>}
+          {disabled && !isCompleted && !isHighlighted && <span className="badge locked">Locked</span>}
+          {isCompleted && <span className="badge completed">Completed</span>}
+        </div>
+
+        <div className="teams">
+          <div className="team">{match.homeTeam}</div>
+          <div className="vs-text">vs</div>
+          <div className="team">{match.awayTeam}</div>
+        </div>
+
+        <div className="predictions">
+          <div className="prediction-row">
+            <label>Who&apos;s Betting:</label>
+            <select
+              value={match.betBy || ''}
+              onChange={(e) => {
+                const newBetBy = e.target.value;
+                if (!newBetBy) {
+                  handleBetUpdate(match.id, '', '');
+                } else {
+                  const newBetAt = match.betBy === newBetBy ? match.betAt : '';
+                  setMatches(matches.map(m => 
+                    m.id === match.id ? { ...m, betBy: newBetBy, betAt: newBetAt } : m
+                  ));
+                }
+              }}
+              disabled={disabled || isCompleted}
+              className="bet-select"
+            >
+              <option value="">No one</option>
+              <option value="Akash Agarwal">Akash Agarwal</option>
+              <option value="Aritra Mustafi">Aritra Mustafi</option>
+            </select>
+          </div>
+
+          {match.betBy && !disabled && !isCompleted && (
+            <div className="prediction-row">
+              <label>Betting On:</label>
+              <select
+                value={match.betAt || ''}
+                onChange={(e) => handleBetUpdate(match.id, match.betBy, e.target.value)}
+                className="bet-select"
+              >
+                <option value="">Select team</option>
+                <option value={match.homeTeam}>{match.homeTeam}</option>
+                <option value={match.awayTeam}>{match.awayTeam}</option>
+              </select>
+            </div>
+          )}
+
+          {match.betBy && (disabled || isCompleted) && match.betAt && (
+            <div className="prediction-row">
+              <label>Betting On:</label>
+              <div className="bet-display">{match.betAt}</div>
+            </div>
+          )}
+
+          <div className="prediction-row winner-row">
+            <label>Winner:</label>
+            <select
+              value={match.wonBy || ''}
+              onChange={(e) => handleWinnerUpdate(match.id, e.target.value)}
+              className="winner-select"
+            >
+              <option value="">Not decided</option>
+              <option value={match.homeTeam}>{match.homeTeam}</option>
+              <option value={match.awayTeam}>{match.awayTeam}</option>
+              <option value="No Result">No Result</option>
+            </select>
+          </div>
+        </div>
+
+        {match.wonBy && match.betBy && match.betAt && (
+          <div className={`result ${match.betAt === match.wonBy ? 'correct' : 'incorrect'}`}>
+            {match.betAt === match.wonBy ? (
+              <span>{match.betBy} predicted correctly! ({match.betAt}) +1000</span>
+            ) : match.wonBy === 'No Result' ? (
+              <span>Match had no result. {match.betBy} bet on {match.betAt}</span>
+            ) : (
+              <span>{match.betBy} predicted wrong ({match.betAt}). {match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal'} +1000</span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (loading) {
     return <div className="container"><div className="loading">Loading matches...</div></div>;
@@ -174,122 +318,91 @@ function App() {
       <header className="header">
         <h1>IPL 2026 Predictions</h1>
         <div className="scoreboard">
-          <div className="score-card">
-            <h3>Akash Agarwal</h3>
-            <div className={`score ${leader === 'Akash Agarwal' ? 'leading' : ''}`}>
-              {scores['Akash Agarwal']}
+          {balance === 0 ? (
+            <div className="score-tied">
+              <div className="tied-text">All Square!</div>
+              <div className="tied-subtext">No one owes anything</div>
             </div>
-          </div>
-          <div className="vs">
-            {leader !== 'Tie' && (
-              <div className="lead-info">
-                {leader} leads by {Math.abs(scoreDiff)}
+          ) : (
+            <div className="score-balance">
+              <div className="owes-text">
+                {balance > 0 ? 'Aritra Mustafi' : 'Akash Agarwal'} owes
               </div>
-            )}
-            {leader === 'Tie' && <div className="lead-info">It&apos;s a tie!</div>}
-          </div>
-          <div className="score-card">
-            <h3>Aritra Mustafi</h3>
-            <div className={`score ${leader === 'Aritra Mustafi' ? 'leading' : ''}`}>
-              {scores['Aritra Mustafi']}
+              <div className="owes-amount">{Math.abs(balance)}</div>
+              <div className="owes-to">
+                to {balance > 0 ? 'Akash Agarwal' : 'Aritra Mustafi'}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </header>
 
-      <div className="matches-container">
-        {sortedMatches.map((match) => {
-          const disabled = isUpdateDisabled(match.startTime);
-          const matchDate = new Date(match.startTime);
-          const isPast = new Date() > matchDate;
-
-          return (
-            <div key={match.id} className={`match-card ${isPast ? 'past' : ''}`}>
-              <div className="match-header">
-                <div className="match-time">{formatDate(match.startTime)}</div>
-                {disabled && !isPast && <span className="badge locked">Locked</span>}
-                {isPast && <span className="badge past">Completed</span>}
-              </div>
-
-              <div className="teams">
-                <div className="team">{match.homeTeam}</div>
-                <div className="vs-text">vs</div>
-                <div className="team">{match.awayTeam}</div>
-              </div>
-
-              <div className="predictions">
-                <div className="prediction-row">
-                  <label>Who&apos;s Betting:</label>
-                  <select
-                    value={match.betBy || ''}
-                    onChange={(e) => {
-                      const newBetBy = e.target.value;
-                      if (!newBetBy) {
-                        // Clear the bet
-                        handleBetUpdate(match.id, '', '');
-                      } else {
-                        // Keep existing betAt if same person, otherwise clear it
-                        const newBetAt = match.betBy === newBetBy ? match.betAt : '';
-                        setMatches(matches.map(m => 
-                          m.id === match.id ? { ...m, betBy: newBetBy, betAt: newBetAt } : m
-                        ));
-                      }
-                    }}
-                    disabled={disabled}
-                    className="bet-select"
-                  >
-                    <option value="">No one</option>
-                    <option value="Akash Agarwal">Akash Agarwal</option>
-                    <option value="Aritra Mustafi">Aritra Mustafi</option>
-                  </select>
-                </div>
-
-                {match.betBy && (
-                  <div className="prediction-row">
-                    <label>Betting On:</label>
-                    <select
-                      value={match.betAt || ''}
-                      onChange={(e) => handleBetUpdate(match.id, match.betBy, e.target.value)}
-                      disabled={disabled}
-                      className="bet-select"
-                    >
-                      <option value="">Select team</option>
-                      <option value={match.homeTeam}>{match.homeTeam}</option>
-                      <option value={match.awayTeam}>{match.awayTeam}</option>
-                    </select>
-                  </div>
-                )}
-
-                <div className="prediction-row winner-row">
-                  <label>Winner:</label>
-                  <select
-                    value={match.wonBy || ''}
-                    onChange={(e) => handleWinnerUpdate(match.id, e.target.value)}
-                    className="winner-select"
-                  >
-                    <option value="">Not decided</option>
-                    <option value={match.homeTeam}>{match.homeTeam}</option>
-                    <option value={match.awayTeam}>{match.awayTeam}</option>
-                    <option value="No Result">No Result</option>
-                  </select>
-                </div>
-              </div>
-
-              {match.wonBy && match.betBy && match.betAt && (
-                <div className={`result ${match.betAt === match.wonBy ? 'correct' : 'incorrect'}`}>
-                  {match.betAt === match.wonBy ? (
-                    <span>{match.betBy} predicted correctly! ({match.betAt}) - {match.betBy === 'Akash Agarwal' ? 'Aritra Mustafi' : 'Akash Agarwal'} -1000</span>
-                  ) : match.wonBy === 'No Result' ? (
-                    <span>Match had no result. {match.betBy} bet on {match.betAt}</span>
-                  ) : (
-                    <span>{match.betBy} predicted wrong ({match.betAt}). {match.betBy} -1000</span>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      {/* Tabs */}
+      <div className="tabs">
+        <button 
+          className={`tab ${activeTab === 'upcoming' ? 'active' : ''}`}
+          onClick={() => setActiveTab('upcoming')}
+        >
+          Upcoming ({upcomingMatches.length})
+        </button>
+        <button 
+          className={`tab ${activeTab === 'completed' ? 'active' : ''}`}
+          onClick={() => setActiveTab('completed')}
+        >
+          Completed ({completedMatches.length})
+        </button>
       </div>
+
+      {/* Upcoming Matches Tab */}
+      {activeTab === 'upcoming' && (
+        <div className="tab-content">
+          {Object.keys(upcomingByDate).length === 0 ? (
+            <div className="no-matches">No upcoming matches</div>
+          ) : (
+            Object.keys(upcomingByDate).sort().map(dateStr => {
+              const isToday = dateStr === todayString;
+              return (
+                <section key={dateStr} className="day-section">
+                  <h2 className={`day-header ${isToday ? 'today' : ''}`}>
+                    {isToday ? 'Today' : formatDateHeader(dateStr)}
+                    {isToday && <span className="today-badge">Live</span>}
+                  </h2>
+                  <div className="matches-container">
+                    {upcomingByDate[dateStr].map(match => 
+                      renderMatchCard(match, match.id === nextMatchId)
+                    )}
+                  </div>
+                </section>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Completed Matches Tab */}
+      {activeTab === 'completed' && (
+        <div className="tab-content">
+          {Object.keys(completedByDate).length === 0 ? (
+            <div className="no-matches">No completed matches yet</div>
+          ) : (
+            Object.keys(completedByDate).sort().reverse().map(dateStr => {
+              const isToday = dateStr === todayString;
+              return (
+                <section key={dateStr} className="day-section">
+                  <h2 className={`day-header ${isToday ? 'today' : ''}`}>
+                    {isToday ? 'Today' : formatDateHeader(dateStr)}
+                  </h2>
+                  <div className="matches-container">
+                    {completedByDate[dateStr].map(match => 
+                      renderMatchCard(match, false)
+                    )}
+                  </div>
+                </section>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 }
