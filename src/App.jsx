@@ -132,14 +132,21 @@ function App() {
   };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Kolkata'
-    });
+    // The DB stores IST time but with a Z suffix (incorrectly marked as UTC)
+    // Extract the time components directly from the ISO string
+    const match = dateString.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!match) return dateString;
+    
+    const [, year, month, day, hours, minutes] = match;
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthName = monthNames[parseInt(month, 10) - 1];
+    
+    let hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'pm' : 'am';
+    hour = hour % 12;
+    hour = hour ? hour : 12;
+    
+    return `${parseInt(day, 10)} ${monthName}, ${hour}:${minutes} ${ampm}`;
   };
 
   const scoreDiff = scores['Akash Agarwal'] - scores['Aritra Mustafi'];
